@@ -6,7 +6,7 @@ import streamlit as st
 
 import db
 from excel_parser import parse_xintel_excel, parse_complementary
-from pdf_generator import generar_pdf_cliente
+from pdf_generator import generar_reporte
 
 st.set_page_config(page_title="Panel Inmobiliario", page_icon=":material/analytics:", layout="wide")
 db.init_db()
@@ -265,15 +265,15 @@ elif seccion == ":material/description: Generar reporte":
                     db.replace_visitas(ficha, periodo, visitas_dict)
                     st.success("Visitas guardadas.", icon=":material/check_circle:")
 
-            if st.button("Generar reporte PDF", type="primary", icon=":material/description:"):
-                with st.spinner("Generando PDF..."):
+            if st.button("Generar reporte", type="primary", icon=":material/description:"):
+                with st.spinner("Generando reporte..."):
                     resumen = db.get_resumen_mercado(periodo)
                     visitas_guardadas = db.get_visitas(ficha, periodo)
-                    pdf_path = generar_pdf_cliente(cliente, resumen, visitas_guardadas, periodo=periodo)
-                    db.save_reporte(ficha, cliente["direccion"], periodo, datetime.now().isoformat(), str(pdf_path))
+                    ruta = generar_reporte(cliente, resumen, visitas_guardadas, periodo=periodo)
+                    db.save_reporte(ficha, cliente["direccion"], periodo, datetime.now().isoformat(), str(ruta))
                     st.success("Reporte generado.", icon=":material/check_circle:")
-                    with open(pdf_path, "rb") as f:
-                        st.download_button("Descargar PDF", f, file_name=pdf_path.name, mime="application/pdf")
+                    with open(ruta, "rb") as f:
+                        st.download_button("Descargar reporte", f, file_name=ruta.name, mime="text/html")
 
 # ---------------------------------------------------------------------------
 # 5) HISTORIAL
