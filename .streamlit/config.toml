@@ -1,0 +1,21 @@
+[theme.light]
+primaryColor = "#2C2E7B"
+backgroundColor = "#F7F8FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1E2233"
+borderColor = "#E8E9F2"
+
+[theme.light.sidebar]
+backgroundColor = "#FFFFFF"
+textColor = "#1E2233"
+
+[theme.dark]
+primaryColor = "#B0B5E0"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#151820"
+textColor = "#E0E2E8"
+borderColor = "#2C2F3A"
+
+[theme.dark.sidebar]
+backgroundColor = "#151820"
+textColor = "#E0E2E8"
