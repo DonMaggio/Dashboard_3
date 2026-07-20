@@ -118,7 +118,7 @@ def _draw_property_bar(pdf, cliente):
 def _draw_kpi_row(pdf, consultas, visitas_count, estado):
     y0 = pdf.get_y()
     card_w = 58
-    card_h = 34
+    card_h = 25
     gap = 4
 
     for i, (numero, label) in enumerate([
@@ -133,17 +133,17 @@ def _draw_kpi_row(pdf, consultas, visitas_count, estado):
         pdf.set_line_width(1.2)
         pdf.line(x, y0, x, y0 + card_h)
 
-        pdf.set_xy(x + 6, y0 + 6)
-        pdf.set_font("Helvetica", "B", 24)
+        pdf.set_xy(x + 6, y0 + 4)
+        pdf.set_font("Helvetica", "B", 22)
         pdf.set_text_color(*C_PRIMARY)
-        pdf.cell(card_w - 12, 12, _s(numero))
+        pdf.cell(card_w - 12, 11, _s(numero))
 
-        pdf.set_xy(x + 6, y0 + 22)
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_xy(x + 6, y0 + 17)
+        pdf.set_font("Helvetica", "", 7.5)
         pdf.set_text_color(*C_MUTED)
-        pdf.cell(card_w - 12, 8, _s(label.upper()))
+        pdf.cell(card_w - 12, 6, _s(label.upper()))
 
-    pdf.set_y(y0 + card_h + 6)
+    pdf.set_y(y0 + card_h + 5)
 
 
 def _draw_visitas_table(pdf, visitas):
@@ -184,6 +184,7 @@ def _draw_visitas_table(pdf, visitas):
 def _draw_mercado(pdf, resumen):
     col_w = 89
     gap = 4
+    card_h = 42
     y0 = pdf.get_y()
 
     for i, (titulo, texto) in enumerate([
@@ -193,7 +194,7 @@ def _draw_mercado(pdf, resumen):
         x = pdf.l_margin + i * (col_w + gap)
         pdf.set_fill_color(*C_MARKET_BG)
         pdf.set_draw_color(*C_MARKET_BORDER)
-        pdf.rect(x, y0, col_w, 55, "DF")
+        pdf.rect(x, y0, col_w, card_h, "DF")
 
         pdf.set_xy(x + 5, y0 + 4)
         pdf.set_font("Helvetica", "B", 9)
@@ -205,12 +206,15 @@ def _draw_mercado(pdf, resumen):
         pdf.set_text_color(58, 61, 80)
         pdf.multi_cell(col_w - 10, 4.5, _s(texto or "Sin datos."))
 
-    pdf.set_y(y0 + 55 + 5)
+    pdf.set_y(y0 + card_h + 5)
 
     ctx = (resumen or {}).get("contexto_general", "")
     y_ctx = pdf.get_y()
-    max_h = pdf.h - y_ctx - 30
-    h_ctx = min(max(24, len(ctx) // 2 + 10) if ctx else 20, max_h) if max_h > 20 else 24
+    if y_ctx > pdf.h - 55:
+        pdf.add_page()
+        y_ctx = pdf.get_y()
+    max_h = pdf.h - y_ctx - 28
+    h_ctx = min(max(20, len(ctx) // 2 + 8) if ctx else 20, max_h) if max_h > 18 else 20
     pdf.set_fill_color(*C_LIGHT_BG)
     pdf.rect(pdf.l_margin, y_ctx, 182, h_ctx, "F")
     pdf.set_font("Helvetica", "B", 9)
@@ -221,21 +225,22 @@ def _draw_mercado(pdf, resumen):
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(58, 61, 80)
     pdf.multi_cell(172, 4.5, _s(ctx or "Sin datos."))
-    pdf.set_y(y_ctx + h_ctx + 4)
+    if pdf.get_y() < y_ctx + h_ctx + 4:
+        pdf.set_y(y_ctx + h_ctx + 4)
 
 
 def _draw_footer(pdf):
-    pdf.set_y(-22)
+    y = pdf.h - 22
     pdf.set_draw_color(*C_BORDER)
     pdf.set_line_width(0.4)
-    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-    pdf.ln(4)
+    pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
     pdf.set_font("Helvetica", "", 8)
     pdf.set_text_color(*C_GRAY)
-    pdf.cell(91, 4, f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}', align="L")
+    pdf.text(pdf.l_margin, y + 5, f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}')
     pdf.set_font("Helvetica", "B", 8)
     pdf.set_text_color(*C_PRIMARY)
-    pdf.cell(91, 4, _s("5IA · Reportes Inteligentes"), align="R")
+    pdf.text(pdf.w - pdf.r_margin - pdf.get_string_width(_s("5IA · Reportes Inteligentes")), y + 5, _s("5IA · Reportes Inteligentes"))
+    pdf.set_y(y + 6)
 
 
 def generar_reporte(cliente, resumen, visitas, periodo=None):
