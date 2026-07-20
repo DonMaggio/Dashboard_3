@@ -273,7 +273,7 @@ elif seccion == ":material/description: Generar reporte":
                     db.save_reporte(ficha, cliente["direccion"], periodo, datetime.now().isoformat(), str(ruta))
                     st.success("Reporte generado.", icon=":material/check_circle:")
                     with open(ruta, "rb") as f:
-                        st.download_button("Descargar reporte", f, file_name=ruta.name, mime="text/html")
+                        st.download_button("Descargar PDF", f, file_name=ruta.name, mime="application/pdf")
 
 # ---------------------------------------------------------------------------
 # 5) HISTORIAL
