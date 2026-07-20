@@ -22,7 +22,7 @@ def _letter_spacing(text):
 
 
 OUTPUT_DIR = Path(__file__).parent / "reportes"
-LOGO_PATH = Path(__file__).parent / "Logo-5IA.png"
+LOGO_PATH = Path(__file__).parent / "Logo-5IA-blanco.png"
 
 C_PRIMARY = (44, 46, 123)
 C_ACCENT = (239, 138, 35)
@@ -74,7 +74,7 @@ def _draw_header(pdf, periodo):
 def _draw_property_bar(pdf, cliente):
     y_bar = pdf.get_y()
     pdf.set_fill_color(*C_LIGHT_BG)
-    pdf.rect(pdf.l_margin, y_bar, 182, 24, "F")
+    pdf.rect(0, y_bar, 210, 24, "F")
 
     cols = [
         ("Direccion", cliente.get("direccion", "")),
@@ -83,7 +83,8 @@ def _draw_property_bar(pdf, cliente):
         ("Estado", cliente.get("estado", "")),
     ]
 
-    w_col = 182 / len(cols) - 3
+    usable = pdf.w - pdf.l_margin - pdf.r_margin
+    w_col = usable / len(cols) - 3
     x_start = pdf.l_margin + 3
 
     for i, (label, valor) in enumerate(cols):
@@ -110,7 +111,7 @@ def _draw_property_bar(pdf, cliente):
     pdf.set_y(y_bar + 24)
     pdf.set_draw_color(*C_ACCENT)
     pdf.set_line_width(1)
-    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.line(0, pdf.get_y(), 210, pdf.get_y())
     pdf.ln(2)
 
 
@@ -208,7 +209,8 @@ def _draw_mercado(pdf, resumen):
 
     ctx = (resumen or {}).get("contexto_general", "")
     y_ctx = pdf.get_y()
-    h_ctx = max(24, len(ctx) // 2 + 10) if ctx else 20
+    max_h = pdf.h - y_ctx - 30
+    h_ctx = min(max(24, len(ctx) // 2 + 10) if ctx else 20, max_h) if max_h > 20 else 24
     pdf.set_fill_color(*C_LIGHT_BG)
     pdf.rect(pdf.l_margin, y_ctx, 182, h_ctx, "F")
     pdf.set_font("Helvetica", "B", 9)
