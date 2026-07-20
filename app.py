@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -289,5 +290,9 @@ elif seccion == ":material/history: Historial":
                 c1.write(r["ficha"])
                 c2.write(r["direccion"])
                 c3.write(r["periodo"])
-                with open(r["pdf_path"], "rb") as f:
-                    c4.download_button("Descargar", f, file_name=r["pdf_path"].split("/")[-1], key=f"dl_{r['id']}")
+                pdf_path = Path(r["pdf_path"])
+                if pdf_path.exists():
+                    with open(pdf_path, "rb") as f:
+                        c4.download_button("Descargar", f, file_name=pdf_path.name, key=f"dl_{r['id']}")
+                else:
+                    c4.caption("Archivo no disponible")
