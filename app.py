@@ -17,30 +17,38 @@ ACCENT = "#EF8A23"
 st.markdown(f"""
 <style>
     .stApp > header {{ background-color: {PRIMARY}; }}
-    .stApp {{ background-color: #0E1117 !important; }}
-    h1, h2, h3 {{ color: #B0B5E0 !important; }}
-    p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #D0D3DD !important; }}
-    .stButton>button[kind="primary"] {{ background-color: {ACCENT} !important; border-color: {ACCENT} !important; color: #FFFFFF !important; }}
-    div[data-testid="stSidebar"] > div:first-child {{ background-color: #151820 !important; }}
-    section[data-testid="stSidebar"] * {{ color: #E0E2E8 !important; }}
-    div[data-testid="stMetric"] > div {{ color: #E0E2E8 !important; }}
-    div[data-testid="stMetric"] label {{ color: #9BA0B0 !important; }}
-    div[data-testid="stMetric"] {{ background-color: #1A1D24 !important; border: 1px solid #2C2F3A !important; border-radius: 8px; padding: 8px 12px; }}
-    div.st-bb, div[data-testid="stDataFrame"], div[data-testid="stExpander"],
-    div[class*="stAlert"], div[data-testid="stVerticalBlockBorder"] > div {{
-        background-color: #1A1D24 !important; border-color: #2C2F3A !important;
+    .stApp {{ background-color: #F7F8FA; }}
+    h1, h2, h3 {{ color: {PRIMARY}; }}
+    .stButton>button[kind="primary"] {{ background-color: {ACCENT}; border-color: {ACCENT}; }}
+    div[data-testid="stSidebar"] > div:first-child {{ background-color: #FFFFFF; }}
+
+    @media (prefers-color-scheme: dark) {{
+        .stApp > header {{ background-color: {PRIMARY} !important; }}
+        .stApp {{ background-color: #0E1117 !important; }}
+        h1, h2, h3 {{ color: #B0B5E0 !important; }}
+        p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #D0D3DD !important; }}
+        .stButton>button[kind="primary"] {{ background-color: {ACCENT} !important; border-color: {ACCENT} !important; color: #FFFFFF !important; }}
+        div[data-testid="stSidebar"] > div:first-child {{ background-color: #151820 !important; }}
+        section[data-testid="stSidebar"] * {{ color: #E0E2E8 !important; }}
+        div[data-testid="stMetric"] > div {{ color: #E0E2E8 !important; }}
+        div[data-testid="stMetric"] label {{ color: #9BA0B0 !important; }}
+        div[data-testid="stMetric"] {{ background-color: #1A1D24 !important; border: 1px solid #2C2F3A !important; border-radius: 8px; padding: 8px 12px; }}
+        div.st-bb, div[data-testid="stDataFrame"], div[data-testid="stExpander"],
+        div[class*="stAlert"], div[data-testid="stVerticalBlockBorder"] > div {{
+            background-color: #1A1D24 !important; border-color: #2C2F3A !important;
+        }}
+        .st-bb {{ border-color: #2C2F3A !important; }}
+        .stTextInput input, .stTextArea textarea, div[data-baseweb="select"] > div,
+        div[data-testid="stMultiSelect"] > div {{
+            background-color: #22262F !important; color: #E0E2E8 !important; border-color: #3A3E4A !important;
+        }}
+        div[role="radiogroup"] label {{ color: #E0E2E8 !important; }}
+        button[kind="secondary"] {{ background-color: #22262F !important; color: #D0D3DD !important; border-color: #3A3E4A !important; }}
+        div.stAlert p {{ color: #D0D3DD !important; }}
+        .st-cx {{ background-color: #1A1D24 !important; }}
+        .st-bq {{ color: #D0D3DD !important; }}
+        div[data-testid="stHeader"] {{ background-color: #0E1117 !important; }}
     }}
-    .st-bb {{ border-color: #2C2F3A !important; }}
-    .stTextInput input, .stTextArea textarea, div[data-baseweb="select"] > div,
-    div[data-testid="stMultiSelect"] > div {{
-        background-color: #22262F !important; color: #E0E2E8 !important; border-color: #3A3E4A !important;
-    }}
-    div[role="radiogroup"] label {{ color: #E0E2E8 !important; }}
-    button[kind="secondary"] {{ background-color: #22262F !important; color: #D0D3DD !important; border-color: #3A3E4A !important; }}
-    div.stAlert p {{ color: #D0D3DD !important; }}
-    .st-cx {{ background-color: #1A1D24 !important; }}
-    .st-bq {{ color: #D0D3DD !important; }}
-    div[data-testid="stHeader"] {{ background-color: #0E1117 !important; }}
 </style>
 """, unsafe_allow_html=True)
 
