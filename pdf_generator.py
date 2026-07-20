@@ -1,3 +1,4 @@
+import math
 import re
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,16 @@ def _s(text):
 
 def _letter_spacing(text):
     return " ".join(text)
+
+
+def _multi_cell_height(pdf, text, w, lh):
+    if not text:
+        return lh
+    lines = text.replace("\r", "").split("\n")
+    total = 0
+    for line in lines:
+        total += max(1, math.ceil(pdf.get_string_width(line) / max(w, 1)))
+    return max(total, 1) * lh
 
 
 OUTPUT_DIR = Path(__file__).parent / "reportes"
@@ -184,8 +195,16 @@ def _draw_visitas_table(pdf, visitas):
 def _draw_mercado(pdf, resumen):
     col_w = 89
     gap = 4
-    card_h = 42
     y0 = pdf.get_y()
+
+    pdf.set_font("Helvetica", "", 9)
+    text_h = []
+    for _, texto in [
+        ("Oferta y demanda de lotes", (resumen or {}).get("oferta_demanda", "")),
+        ("Costo de construccion", (resumen or {}).get("costo_construccion", "")),
+    ]:
+        text_h.append(_multi_cell_height(pdf, _s(texto or "Sin datos."), col_w - 10, 4.5))
+    card_h = min(max(40, 12 + max(text_h) + 6), pdf.h - y0 - 50)
 
     for i, (titulo, texto) in enumerate([
         ("Oferta y demanda de lotes", (resumen or {}).get("oferta_demanda", "")),
@@ -208,13 +227,15 @@ def _draw_mercado(pdf, resumen):
 
     pdf.set_y(y0 + card_h + 5)
 
-    ctx = (resumen or {}).get("contexto_general", "")
+    ctx = _s((resumen or {}).get("contexto_general", "") or "Sin datos.")
     y_ctx = pdf.get_y()
     if y_ctx > pdf.h - 55:
         pdf.add_page()
         y_ctx = pdf.get_y()
+    pdf.set_font("Helvetica", "", 9)
+    text_h = _multi_cell_height(pdf, ctx, 172, 4.5)
     max_h = pdf.h - y_ctx - 28
-    h_ctx = min(max(20, len(ctx) // 2 + 8) if ctx else 20, max_h) if max_h > 18 else 20
+    h_ctx = min(12 + text_h + 8, max_h)
     pdf.set_fill_color(*C_LIGHT_BG)
     pdf.rect(pdf.l_margin, y_ctx, 182, h_ctx, "F")
     pdf.set_font("Helvetica", "B", 9)
@@ -224,7 +245,7 @@ def _draw_mercado(pdf, resumen):
     pdf.set_xy(pdf.l_margin + 5, y_ctx + 12)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(58, 61, 80)
-    pdf.multi_cell(172, 4.5, _s(ctx or "Sin datos."))
+    pdf.multi_cell(172, 4.5, ctx)
     if pdf.get_y() < y_ctx + h_ctx + 4:
         pdf.set_y(y_ctx + h_ctx + 4)
 
