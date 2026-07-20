@@ -16,23 +16,27 @@ ACCENT = "#EF8A23"
 
 st.markdown(f"""
 <style>
-    :root {{
-        --primary: {PRIMARY};
-        --accent: {ACCENT};
-    }}
-    .stApp {{ background-color: #F7F8FA; }}
-    h1, h2, h3 {{ color: var(--primary); }}
-    .stButton>button[kind="primary"] {{ background-color: var(--accent); border-color: var(--accent); }}
-    div[data-testid="stSidebar"] > div:first-child {{ background-color: #FFFFFF; }}
+    .stApp > header {{ background-color: {PRIMARY}; }}
+    .stApp {{ background-color: #F7F8FA !important; }}
+    h1, h2, h3 {{ color: {PRIMARY} !important; }}
+    p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #1E2233 !important; }}
+    .stButton>button[kind="primary"] {{ background-color: {ACCENT} !important; border-color: {ACCENT} !important; }}
+    div[data-testid="stSidebar"] > div:first-child {{ background-color: #FFFFFF !important; }}
+    section[data-testid="stSidebar"] * {{ color: #1E2233 !important; }}
+    div[data-testid="stMetric"] > div {{ color: #1E2233 !important; }}
+    div[data-testid="stMetric"] label {{ color: #5A5F76 !important; }}
+    .stTextInput input, .stTextArea textarea {{ color: #1E2233 !important; }}
+    div[role="radiogroup"] label {{ color: #1E2233 !important; }}
+    div.stAlert p {{ color: #1E2233 !important; }}
 
     @media (prefers-color-scheme: dark) {{
         .stApp {{ background-color: #0E1117 !important; }}
         h1, h2, h3 {{ color: #A0A5D0 !important; }}
+        p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #D0D3DD !important; }}
         div[data-testid="stSidebar"] > div:first-child {{ background-color: #151820 !important; }}
         section[data-testid="stSidebar"] * {{ color: #E0E2E8 !important; }}
-        p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #D0D3DD !important; }}
         div[data-testid="stMetric"] > div, div[data-testid="stMetric"] label {{ color: #E0E2E8 !important; }}
-        div[data-testid="stMetric"] {{ background-color: #1A1D24; border: 1px solid #2C2F3A; border-radius: 8px; padding: 8px 12px; }}
+        div[data-testid="stMetric"] {{ background-color: #1A1D24 !important; border: 1px solid #2C2F3A !important; border-radius: 8px; padding: 8px 12px; }}
         div.st-bb, div[data-testid="stDataFrame"], div[data-testid="stExpander"],
         div[class*="stAlert"], div[data-testid="stVerticalBlockBorder"] > div {{
             background-color: #1A1D24 !important; border-color: #2C2F3A !important;
@@ -64,8 +68,8 @@ if not st.session_state.logged_in:
     with col2:
         st.title("Panel Inmobiliario")
         st.image("Logo-5IA.png", width=200)
-        user = st.text_input("Usuario", placeholder="consultora", label_visibility="collapsed")
-        password = st.text_input("Contraseña", type="password", placeholder="consultora", label_visibility="collapsed")
+        user = st.text_input("Usuario", placeholder="Usuario", label_visibility="collapsed")
+        password = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
         if st.button("Ingresar", type="primary", use_container_width=True):
             if user == "consultora" and password == "consultora":
                 st.session_state.logged_in = True
