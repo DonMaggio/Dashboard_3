@@ -11,17 +11,41 @@ from pdf_generator import generar_reporte
 st.set_page_config(page_title="Panel Inmobiliario", page_icon=":material/analytics:", layout="wide")
 db.init_db()
 
-st.logo("Logo-5IA.png")
-
 PRIMARY = "#2C2E7B"
 ACCENT = "#EF8A23"
 
 st.markdown(f"""
 <style>
+    :root {{
+        --primary: {PRIMARY};
+        --accent: {ACCENT};
+    }}
     .stApp {{ background-color: #F7F8FA; }}
-    h1, h2, h3 {{ color: {PRIMARY}; }}
-    .stButton>button[kind="primary"] {{ background-color: {ACCENT}; border-color: {ACCENT}; }}
+    h1, h2, h3 {{ color: var(--primary); }}
+    .stButton>button[kind="primary"] {{ background-color: var(--accent); border-color: var(--accent); }}
     div[data-testid="stSidebar"] > div:first-child {{ background-color: #FFFFFF; }}
+
+    @media (prefers-color-scheme: dark) {{
+        .stApp {{ background-color: #0E1117 !important; }}
+        h1, h2, h3 {{ color: #A0A5D0 !important; }}
+        div[data-testid="stSidebar"] > div:first-child {{ background-color: #151820 !important; }}
+        section[data-testid="stSidebar"] * {{ color: #E0E2E8 !important; }}
+        p, .stMarkdown, .stCaption, .st-bw, .st-c0, .st-dl {{ color: #D0D3DD !important; }}
+        div[data-testid="stMetric"] > div, div[data-testid="stMetric"] label {{ color: #E0E2E8 !important; }}
+        div[data-testid="stMetric"] {{ background-color: #1A1D24; border: 1px solid #2C2F3A; border-radius: 8px; padding: 8px 12px; }}
+        div.st-bb, div[data-testid="stDataFrame"], div[data-testid="stExpander"],
+        div[class*="stAlert"], div[data-testid="stVerticalBlockBorder"] > div {{
+            background-color: #1A1D24 !important; border-color: #2C2F3A !important;
+        }}
+        .st-bb {{ border-color: #2C2F3A !important; }}
+        .stTextInput input, .stTextArea textarea, div[data-baseweb="select"] > div,
+        div[data-testid="stMultiSelect"] > div {{
+            background-color: #22262F !important; color: #E0E2E8 !important; border-color: #3A3E4A !important;
+        }}
+        div[role="radiogroup"] label {{ color: #E0E2E8 !important; }}
+        button[kind="secondary"] {{ background-color: #22262F !important; color: #D0D3DD !important; border-color: #3A3E4A !important; }}
+        div.stAlert p {{ color: #D0D3DD !important; }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -31,8 +55,36 @@ def periodo_actual() -> str:
     return f"{hoy.year}-{hoy.month:02d}"
 
 
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.logo("Logo-5IA.png")
+    col1, col2, col3 = st.columns([1.5, 2, 1.5])
+    with col2:
+        st.title("Panel Inmobiliario")
+        st.image("Logo-5IA.png", width=200)
+        user = st.text_input("Usuario", placeholder="consultora", label_visibility="collapsed")
+        password = st.text_input("Contraseña", type="password", placeholder="consultora", label_visibility="collapsed")
+        if st.button("Ingresar", type="primary", use_container_width=True):
+            if user == "consultora" and password == "consultora":
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
+    st.stop()
+
+st.logo("Logo-5IA.png")
+
 with st.sidebar:
-    st.caption("Reportes mensuales por cliente")
+    with st.container():
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.caption("Reportes mensuales por cliente")
+        with c2:
+            if st.button(":material/logout:", help="Cerrar sesión", key="logout_btn"):
+                st.session_state.logged_in = False
+                st.rerun()
     seccion = st.radio(
         "Navegación",
         [":material/explore: Explorar y filtrar", ":material/upload: Cargar Excel Xintel",
