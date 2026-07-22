@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 
 
@@ -9,6 +11,15 @@ def _clean_valor(val):
         return f"{float(s):.2f}"
     except ValueError:
         return str(val)
+
+
+def valor_to_float(valor_str):
+    if valor_str is None:
+        return None
+    try:
+        return float(valor_str)
+    except (ValueError, TypeError):
+        return None
 
 
 def _map_estado(sheet_name):
@@ -80,6 +91,86 @@ def parse_xintel_excel(archivo, periodo):
             "periodo": periodo,
         })
 
+    return registros
+
+
+def parse_cartera(archivo, periodo):
+    xls = pd.ExcelFile(archivo)
+    registros = []
+    for sheet in xls.sheet_names:
+        if not (sheet.startswith("Propiedades ") or sheet.startswith("Tasaciones ")):
+            continue
+        df = pd.read_excel(xls, sheet_name=sheet)
+        if "Ficha nro." not in df.columns:
+            continue
+        categoria = "Propiedad" if sheet.startswith("Propiedades ") else "Tasacion"
+        estado = sheet.replace("Propiedades ", "").replace("Tasaciones ", "Tasación ").strip()
+        for _, row in df.iterrows():
+            f = row.get("Ficha nro.")
+            if pd.isna(f):
+                continue
+            fecha_raw = row.get("Fecha")
+            fecha = None
+            if pd.notna(fecha_raw):
+                try:
+                    fecha = str(pd.Timestamp(fecha_raw).date())
+                except Exception:
+                    fecha = str(fecha_raw)
+            registros.append({
+                "ficha": str(int(f)),
+                "fecha_alta": fecha,
+                "direccion": str(row.get("Dirección", "")).strip() if pd.notna(row.get("Dirección")) else "",
+                "barrio": str(row.get("Barrio", "")).strip() if pd.notna(row.get("Barrio")) else "",
+                "localidad": str(row.get("Localidad", "")).strip() if pd.notna(row.get("Localidad")) else "",
+                "tipo": str(row.get("Tipo", "")).strip() if pd.notna(row.get("Tipo")) else "",
+                "operacion": str(row.get("Operación", "")).strip() if pd.notna(row.get("Operación")) else "",
+                "valor": _clean_valor(row.get("Valor")),
+                "moneda": str(row.get("Moneda", "")).strip() if pd.notna(row.get("Moneda")) else "",
+                "estado": estado,
+                "categoria": categoria,
+                "periodo": periodo,
+            })
+    return registros
+
+
+def parse_consultas_diarias(archivo, periodo):
+    xls = pd.ExcelFile(archivo)
+    registros = []
+
+    sheet_map = {
+        "CONSULTAS POR CANAL": "total",
+        "CONSULTAS UNICAS POR CANAL": "unica",
+        "CONSULTAS POR OPERACION": "operacion",
+    }
+
+    for sheet_name, tipo_reg in sheet_map.items():
+        try:
+            df = pd.read_excel(xls, sheet_name=sheet_name)
+        except ValueError:
+            continue
+        if df.empty:
+            continue
+        col_key = "Canal" if tipo_reg != "operacion" else "Operación"
+        if col_key not in df.columns:
+            continue
+        for _, row in df.iterrows():
+            fecha_raw = row.get("Fecha")
+            fecha_hora = None
+            if pd.notna(fecha_raw):
+                try:
+                    fecha_hora = str(pd.Timestamp(fecha_raw))
+                except Exception:
+                    fecha_hora = str(fecha_raw)
+            registros.append({
+                "periodo": periodo,
+                "fecha_hora": fecha_hora,
+                "tipo_registro": tipo_reg,
+                "canal": str(row.get("Canal", "")).strip() if tipo_reg != "operacion" and pd.notna(row.get("Canal")) else "",
+                "operacion": str(row.get("Operación", "")).strip() if tipo_reg == "operacion" and pd.notna(row.get("Operación")) else "",
+                "cliente": str(row.get("Cliente", "")).strip() if pd.notna(row.get("Cliente")) else "",
+                "email": str(row.get("E-mail", "")).strip() if pd.notna(row.get("E-mail")) else "",
+                "telefono": str(row.get("Teléfono", "")).strip() if pd.notna(row.get("Teléfono")) else "",
+            })
     return registros
 
 

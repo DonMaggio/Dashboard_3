@@ -69,6 +69,36 @@ def init_db():
                 pdf_path TEXT
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS cartera (
+                ficha TEXT NOT NULL,
+                periodo TEXT NOT NULL,
+                fecha_alta TEXT,
+                direccion TEXT,
+                barrio TEXT,
+                localidad TEXT,
+                tipo TEXT,
+                operacion TEXT,
+                valor TEXT,
+                moneda TEXT,
+                estado TEXT,
+                categoria TEXT,
+                PRIMARY KEY (ficha, periodo, categoria, estado)
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS consultas_diarias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                periodo TEXT NOT NULL,
+                fecha_hora TEXT,
+                tipo_registro TEXT,
+                canal TEXT,
+                operacion TEXT,
+                cliente TEXT,
+                email TEXT,
+                telefono TEXT
+            )
+        """)
 
 
 def upsert_clientes(registros):
@@ -214,5 +244,66 @@ def get_historial():
     return [
         {"id": r[0], "ficha": r[1], "direccion": r[2], "periodo": r[3],
          "generado_en": r[4], "pdf_path": r[5]}
+        for r in rows
+    ]
+
+
+def insert_cartera(registros):
+    with _conn() as c:
+        c.execute("DELETE FROM cartera WHERE periodo = ?", (registros[0]["periodo"],))
+        for r in registros:
+            c.execute("""
+                INSERT OR REPLACE INTO cartera (ficha, periodo, fecha_alta, direccion, barrio, localidad, tipo, operacion, valor, moneda, estado, categoria)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                r["ficha"], r["periodo"], r.get("fecha_alta"),
+                r.get("direccion"), r.get("barrio"), r.get("localidad"),
+                r.get("tipo"), r.get("operacion"), r.get("valor"),
+                r.get("moneda"), r.get("estado"), r.get("categoria")
+            ))
+
+
+def get_cartera(periodo):
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT ficha, fecha_alta, direccion, barrio, localidad, tipo, operacion, valor, moneda, estado, categoria FROM cartera WHERE periodo = ? ORDER BY ficha",
+            (periodo,)
+        ).fetchall()
+    return [
+        {"ficha": r[0], "fecha_alta": r[1], "direccion": r[2], "barrio": r[3],
+         "localidad": r[4], "tipo": r[5], "operacion": r[6], "valor": r[7],
+         "moneda": r[8], "estado": r[9], "categoria": r[10]}
+        for r in rows
+    ]
+
+
+def insert_consultas_diarias(registros):
+    with _conn() as c:
+        c.execute("DELETE FROM consultas_diarias WHERE periodo = ?", (registros[0]["periodo"],))
+        for r in registros:
+            c.execute("""
+                INSERT INTO consultas_diarias (periodo, fecha_hora, tipo_registro, canal, operacion, cliente, email, telefono)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                r["periodo"], r.get("fecha_hora"), r.get("tipo_registro"),
+                r.get("canal"), r.get("operacion"), r.get("cliente"),
+                r.get("email"), r.get("telefono")
+            ))
+
+
+def get_consultas_diarias(periodo, tipo_registro=None):
+    with _conn() as c:
+        if tipo_registro:
+            rows = c.execute(
+                "SELECT fecha_hora, canal, operacion, cliente FROM consultas_diarias WHERE periodo = ? AND tipo_registro = ? ORDER BY fecha_hora",
+                (periodo, tipo_registro)
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT fecha_hora, canal, operacion, cliente FROM consultas_diarias WHERE periodo = ? ORDER BY fecha_hora",
+                (periodo,)
+            ).fetchall()
+    return [
+        {"fecha_hora": r[0], "canal": r[1], "operacion": r[2], "cliente": r[3]}
         for r in rows
     ]

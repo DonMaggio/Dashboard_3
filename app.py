@@ -2,10 +2,13 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 import db
-from excel_parser import parse_xintel_excel, parse_complementary
+import excel_parser
+from excel_parser import parse_xintel_excel, parse_complementary, parse_cartera, parse_consultas_diarias
 from pdf_generator import generar_reporte
 
 st.set_page_config(page_title="Panel Inmobiliario", page_icon=":material/analytics:", layout="wide")
@@ -61,6 +64,66 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
+def _pie_chart(series, names_label):
+    return px.pie(
+        values=series.values,
+        names=series.index,
+        title=None,
+        hole=0.4,
+    ).update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=True)
+
+
+def _bar_chart(series, x_label, y_label):
+    return px.bar(
+        x=series.index,
+        y=series.values,
+        labels={"x": x_label, "y": y_label},
+    ).update_layout(margin=dict(t=0, b=0, l=0, r=0), xaxis_tickangle=-45)
+
+
+def _stacked_bar(df, x_label, y_label):
+    fig = go.Figure()
+    for col in df.columns:
+        fig.add_trace(go.Bar(name=col, x=df.index, y=df[col]))
+    fig.update_layout(
+        barmode="stack",
+        margin=dict(t=0, b=0, l=0, r=0),
+        xaxis_tickangle=-45,
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+    )
+    return fig
+
+
+def _scatter_chart(df, x_col, y_col, color_col, x_label, y_label):
+    return px.scatter(
+        df, x=x_col, y=y_col, color=color_col,
+        labels={x_col: x_label, y_col: y_label},
+        hover_data=["ficha", "barrio", "direccion"],
+    ).update_layout(margin=dict(t=0, b=0, l=0, r=0))
+
+
+def _dual_axis_chart(df, bar_col, line_col):
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df.index, y=df[bar_col],
+        name=bar_col, yaxis="y", marker_color="#2C2E7B"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df[line_col],
+        name=line_col, yaxis="y2", mode="lines+markers",
+        marker_color="#EF8A23", line=dict(color="#EF8A23")
+    ))
+    fig.update_layout(
+        yaxis=dict(title=bar_col, side="left"),
+        yaxis2=dict(title=line_col, overlaying="y", side="right"),
+        margin=dict(t=0, b=0, l=0, r=0),
+        xaxis_tickangle=-45,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
 def periodo_actual() -> str:
     hoy = date.today()
     return f"{hoy.year}-{hoy.month:02d}"
@@ -98,7 +161,8 @@ with st.sidebar:
                 st.rerun()
     seccion = st.radio(
         "Navegación",
-        [":material/explore: Explorar y filtrar", ":material/upload: Cargar Excel Xintel",
+        [":material/explore: Explorar y filtrar", ":material/analytics: Analítica avanzada",
+         ":material/upload: Cargar Excel Xintel",
          ":material/trending_up: Resumen de mercado", ":material/description: Generar reporte",
          ":material/history: Historial"],
         label_visibility="collapsed",
@@ -247,7 +311,319 @@ if seccion == ":material/explore: Explorar y filtrar":
             st.warning("No hay datos para ese período.")
 
 # ---------------------------------------------------------------------------
-# 2) CARGAR EXCEL XINTEL
+# 2) ANALÍTICA AVANZADA
+# ---------------------------------------------------------------------------
+elif seccion == ":material/analytics: Analítica avanzada":
+    st.title("Analítica avanzada")
+    periodos = db.get_periodos_disponibles()
+    if not periodos:
+        st.info("Primero cargá un Excel de Xintel.", icon=":material/info:")
+    else:
+        periodo = st.selectbox("Período", periodos, key="periodo_avanzada")
+        tab_cartera, tab_tendencias, tab_canales, tab_correlaciones, tab_conversion = st.tabs(
+            ["Cartera", "Tendencias", "Canales", "Correlaciones", "Conversión"]
+        )
+
+        # ── TAB 1: CARTERA ──────────────────────────────────────────────
+        with tab_cartera:
+            cartera = db.get_cartera(periodo)
+            if not cartera:
+                st.info("No hay datos de cartera para este período.")
+            else:
+                df_c = pd.DataFrame(cartera)
+                df_c["valor_num"] = df_c["valor"].apply(excel_parser.valor_to_float)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    with st.container(border=True):
+                        st.subheader("Distribución por tipo")
+                        tipo_counts = df_c[df_c["categoria"] == "Propiedad"]["tipo"].value_counts()
+                        if not tipo_counts.empty:
+                            st.plotly_chart(
+                                _pie_chart(tipo_counts, "Tipo"),
+                                use_container_width=True, key="pie_tipo"
+                            )
+                        else:
+                            st.caption("Sin datos de tipo.")
+
+                with col2:
+                    with st.container(border=True):
+                        st.subheader("Valor promedio por tipo (U$D)")
+                        ven = df_c[(df_c["operacion"] == "Venta") & (df_c["moneda"] == "U$D") & (df_c["valor_num"].notna())]
+                        if not ven.empty:
+                            avg_val = ven.groupby("tipo")["valor_num"].mean().sort_values(ascending=False)
+                            st.plotly_chart(
+                                _bar_chart(avg_val, "Tipo", "Valor promedio U$D"),
+                                use_container_width=True, key="bar_valor_tipo"
+                            )
+                        else:
+                            st.caption("Sin datos de valor.")
+
+                with st.container(border=True):
+                    st.subheader("Operación por barrio")
+                    op_barrio = df_c[df_c["categoria"] == "Propiedad"].groupby(["barrio", "operacion"]).size().unstack(fill_value=0)
+                    if not op_barrio.empty:
+                        op_barrio = op_barrio.sort_values(op_barrio.columns[0], ascending=False).head(10)
+                        st.plotly_chart(
+                            _stacked_bar(op_barrio, "Barrio", "Cantidad"),
+                            use_container_width=True, key="stack_op_barrio"
+                        )
+                    else:
+                        st.caption("Sin datos.")
+
+                with st.container(border=True):
+                    st.subheader("Valor promedio por barrio (U$D, Venta)")
+                    ven_barrio = ven.groupby("barrio")["valor_num"].mean().sort_values(ascending=False).head(10)
+                    if not ven_barrio.empty:
+                        st.plotly_chart(
+                            _bar_chart(ven_barrio, "Barrio", "Valor promedio U$D"),
+                            use_container_width=True, key="bar_valor_barrio"
+                        )
+                    else:
+                        st.caption("Sin datos.")
+
+                with st.expander("Ver tabla resumen"):
+                    resumen = df_c[df_c["categoria"] == "Propiedad"].groupby(["tipo", "barrio"]).agg(
+                        cantidad=("ficha", "count"),
+                        valor_promedio=("valor_num", "mean"),
+                        valor_min=("valor_num", "min"),
+                        valor_max=("valor_num", "max"),
+                    ).reset_index()
+                    resumen["valor_promedio"] = resumen["valor_promedio"].round(2)
+                    st.dataframe(resumen, hide_index=True)
+
+        # ── TAB 2: TENDENCIAS ───────────────────────────────────────────
+        with tab_tendencias:
+            col1, col2 = st.columns(2)
+            with col1:
+                with st.container(border=True):
+                    st.subheader("Consultas por día")
+                    cd = db.get_consultas_diarias(periodo, "total")
+                    if cd:
+                        df_cd = pd.DataFrame(cd)
+                        df_cd["fecha"] = pd.to_datetime(df_cd["fecha_hora"], errors="coerce").dt.date
+                        diario = df_cd.groupby("fecha").size()
+                        if not diario.empty:
+                            st.line_chart(diario)
+                        else:
+                            st.caption("Sin datos.")
+                    else:
+                        st.caption("Sin datos de consultas diarias.")
+
+            with col2:
+                with st.container(border=True):
+                    st.subheader("Consultas únicas por día")
+                    cu = db.get_consultas_diarias(periodo, "unica")
+                    if cu:
+                        df_cu = pd.DataFrame(cu)
+                        df_cu["fecha"] = pd.to_datetime(df_cu["fecha_hora"], errors="coerce").dt.date
+                        diario_u = df_cu.groupby("fecha").size()
+                        if not diario_u.empty:
+                            st.line_chart(diario_u)
+                        else:
+                            st.caption("Sin datos.")
+                    else:
+                        st.caption("Sin datos.")
+
+            with st.container(border=True):
+                st.subheader("Propiedades nuevas y vendidas por día")
+                if cartera:
+                    df_cartera = pd.DataFrame(cartera)
+                    nuevas = df_cartera[(df_cartera["estado"] == "NUEVAS") & (df_cartera["fecha_alta"].notna())].copy()
+                    vendidas = df_cartera[(df_cartera["estado"] == "VENDIDAS") & (df_cartera["fecha_alta"].notna())].copy()
+                    if not nuevas.empty or not vendidas.empty:
+                        series = {}
+                        if not nuevas.empty:
+                            nuevas["fecha"] = pd.to_datetime(nuevas["fecha_alta"], errors="coerce").dt.date
+                            series["Nuevas"] = nuevas.groupby("fecha").size()
+                        if not vendidas.empty:
+                            vendidas["fecha"] = pd.to_datetime(vendidas["fecha_alta"], errors="coerce").dt.date
+                            series["Vendidas"] = vendidas.groupby("fecha").size()
+                        df_ts = pd.DataFrame(series).fillna(0)
+                        if not df_ts.empty:
+                            st.line_chart(df_ts)
+                        else:
+                            st.caption("Sin datos de fechas.")
+                    else:
+                        st.caption("Sin datos.")
+                else:
+                    st.caption("Sin datos de cartera.")
+
+        # ── TAB 3: CANALES ──────────────────────────────────────────────
+        with tab_canales:
+            canales = db.get_canales(periodo)
+            if not canales:
+                st.info("Sin datos de canales.")
+            else:
+                df_can = pd.DataFrame(canales)
+                df_can["tasa_unicidad"] = (df_can["unicas"] / df_can["total"] * 100).round(1)
+                total_cons = df_can["total"].sum()
+                df_can["participacion"] = (df_can["total"] / total_cons * 100).round(1)
+
+                with st.container(border=True):
+                    st.subheader("Rendimiento por canal")
+                    st.dataframe(
+                        df_can[["canal", "total", "unicas", "tasa_unicidad", "participacion"]],
+                        column_config={
+                            "canal": "Canal",
+                            "total": "Totales",
+                            "unicas": "Únicas",
+                            "tasa_unicidad": st.column_config.NumberColumn("Tasa unicidad %", format="%.1f%%"),
+                            "participacion": st.column_config.NumberColumn("Participación %", format="%.1f%%"),
+                        },
+                        hide_index=True,
+                    )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    with st.container(border=True):
+                        st.subheader("Totales por canal")
+                        orden = df_can.sort_values("total", ascending=True)
+                        st.plotly_chart(
+                            _bar_chart(orden.set_index("canal")["total"], "Canal", "Total"),
+                            use_container_width=True, key="canal_total"
+                        )
+                with col2:
+                    with st.container(border=True):
+                        st.subheader("Participación por canal")
+                        st.plotly_chart(
+                            _pie_chart(df_can.set_index("canal")["total"], "Canal"),
+                            use_container_width=True, key="canal_pie"
+                        )
+
+                if len(periodos) > 1:
+                    with st.expander("Comparar con otro período"):
+                        p2 = st.selectbox("Período a comparar", [p for p in periodos if p != periodo], key="p2_canales")
+                        canales2 = db.get_canales(p2)
+                        if canales2:
+                            df_c2 = pd.DataFrame(canales2)
+                            comp = df_can[["canal", "total"]].merge(df_c2[["canal", "total"]], on="canal", how="outer", suffixes=(f"_{periodo}", f"_{p2}")).fillna(0)
+                            comp["diff"] = comp[f"total_{periodo}"] - comp[f"total_{p2}"]
+                            st.dataframe(comp, hide_index=True)
+
+        # ── TAB 4: CORRELACIONES ────────────────────────────────────────
+        with tab_correlaciones:
+            clientes = db.get_clientes(periodo)
+            if not clientes:
+                st.info("Sin datos de clientes.")
+            else:
+                df_cli = pd.DataFrame(clientes)
+                df_cli["valor_num"] = df_cli["valor"].apply(excel_parser.valor_to_float)
+
+                df_venta = df_cli[(df_cli["operacion"] == "Venta") & (df_cli["moneda"] == "U$D") & (df_cli["valor_num"].notna())]
+                df_alq = df_cli[(df_cli["operacion"] == "Alquiler") & (df_cli["moneda"] == "U$D") & (df_cli["valor_num"].notna())]
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    with st.container(border=True):
+                        st.subheader("Consultas vs Precio — Venta")
+                        if not df_venta.empty:
+                            fig = _scatter_chart(df_venta, "valor_num", "consultas", "tipo", "Valor U$D", "Consultas")
+                            st.plotly_chart(fig, use_container_width=True, key="scatter_venta")
+                        else:
+                            st.caption("Sin datos de venta.")
+                with col2:
+                    with st.container(border=True):
+                        st.subheader("Consultas vs Precio — Alquiler")
+                        if not df_alq.empty:
+                            fig = _scatter_chart(df_alq, "valor_num", "consultas", "tipo", "Valor U$D", "Consultas")
+                            st.plotly_chart(fig, use_container_width=True, key="scatter_alq")
+                        else:
+                            st.caption("Sin datos de alquiler.")
+
+                with st.container(border=True):
+                    st.subheader("Promedio de consultas por tipo")
+                    prom_tipo = df_cli.groupby("tipo")["consultas"].mean().sort_values(ascending=False)
+                    if not prom_tipo.empty:
+                        st.plotly_chart(
+                            _bar_chart(prom_tipo, "Tipo", "Consultas promedio"),
+                            use_container_width=True, key="bar_cons_tipo"
+                        )
+                    else:
+                        st.caption("Sin datos.")
+
+                with st.container(border=True):
+                    st.subheader("Consultas totales y valor promedio por barrio")
+                    agrupado = df_cli[df_cli["valor_num"].notna()].groupby("barrio").agg(
+                        consultas_totales=("consultas", "sum"),
+                        valor_promedio=("valor_num", "mean"),
+                    ).sort_values("consultas_totales", ascending=False).head(10)
+                    if not agrupado.empty:
+                        fig = _dual_axis_chart(agrupado, "Consultas totales", "Valor promedio U$D")
+                        st.plotly_chart(fig, use_container_width=True, key="dual_barrio")
+                    else:
+                        st.caption("Sin datos.")
+
+        # ── TAB 5: CONVERSIÓN ──────────────────────────────────────────
+        with tab_conversion:
+            clientes = db.get_clientes(periodo)
+            if not clientes:
+                st.info("Sin datos de clientes para conversión.")
+            else:
+                total_consultas = sum(c["consultas"] for c in clientes)
+                visitas_count = len(db.get_visitas("", periodo)) if periodo else 0
+                total_visitas = 0
+                for c in clientes:
+                    total_visitas += len(db.get_visitas(c["ficha"], periodo))
+
+                cartera_data = db.get_cartera(periodo)
+                df_cartera = pd.DataFrame(cartera_data) if cartera_data else pd.DataFrame()
+                total_vendidas = len(df_cartera[df_cartera["estado"] == "VENDIDAS"]) if not df_cartera.empty else 0
+                total_alquiladas = len(df_cartera[df_cartera["estado"] == "ALQUILADAS"]) if not df_cartera.empty else 0
+
+                t_cons_visita = (total_visitas / total_consultas * 100) if total_consultas > 0 else 0
+                t_visita_op = ((total_vendidas + total_alquiladas) / total_visitas * 100) if total_visitas > 0 else 0
+                t_cons_op = ((total_vendidas + total_alquiladas) / total_consultas * 100) if total_consultas > 0 else 0
+
+                with st.container(border=True):
+                    st.subheader("Funil de conversión del período")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Consultas", f"{total_consultas:,}")
+                    c2.metric("Visitas", f"{total_visitas:,}")
+                    c3.metric("Vendidas", total_vendidas)
+                    c4.metric("Alquiladas", total_alquiladas)
+
+                    st.markdown("**Progreso del funil**")
+                    st.progress(min(total_consultas / max(total_consultas, 1), 1.0), text=f"Consultas: {total_consultas:,}")
+                    st.progress(min(total_visitas / max(total_consultas, 1), 1.0), text=f"Visitas: {total_visitas:,}")
+                    st.progress(min((total_vendidas + total_alquiladas) / max(total_consultas, 1), 1.0), text=f"Operaciones cerradas: {total_vendidas + total_alquiladas}")
+
+                with st.container(border=True):
+                    st.subheader("Tasas de conversión")
+                    cc1, cc2, cc3 = st.columns(3)
+                    cc1.metric("Consulta → Visita", f"{t_cons_visita:.1f}%")
+                    cc2.metric("Visita → Operación", f"{t_visita_op:.1f}%")
+                    cc3.metric("Consulta → Operación", f"{t_cons_op:.1f}%")
+
+                with st.container(border=True):
+                    st.subheader("Conversión por barrio (top 10)")
+                    if not df_cartera.empty:
+                        prop_por_barrio = df_cartera[df_cartera["categoria"] == "Propiedad"]
+                        if not prop_por_barrio.empty:
+                            barrio_conv = prop_por_barrio.groupby("barrio").agg(
+                                total=("ficha", "count"),
+                                vendidas=("estado", lambda x: (x == "VENDIDAS").sum()),
+                                alquiladas=("estado", lambda x: (x == "ALQUILADAS").sum()),
+                            ).reset_index()
+                            barrio_conv["cerradas"] = barrio_conv["vendidas"] + barrio_conv["alquiladas"]
+                            barrio_conv["tasa_cierre"] = (barrio_conv["cerradas"] / barrio_conv["total"] * 100).round(1)
+                            barrio_conv = barrio_conv.sort_values("total", ascending=False).head(10)
+                            st.dataframe(
+                                barrio_conv[["barrio", "total", "vendidas", "alquiladas", "cerradas", "tasa_cierre"]],
+                                column_config={
+                                    "barrio": "Barrio",
+                                    "total": "Total propiedades",
+                                    "vendidas": "Vendidas",
+                                    "alquiladas": "Alquiladas",
+                                    "cerradas": "Cerradas",
+                                    "tasa_cierre": st.column_config.NumberColumn("Tasa de cierre %", format="%.1f%%"),
+                                },
+                                hide_index=True,
+                            )
+
+
+# ---------------------------------------------------------------------------
+# 3) CARGAR EXCEL XINTEL
 # ---------------------------------------------------------------------------
 elif seccion == ":material/upload: Cargar Excel Xintel":
     st.title("Cargar Excel mensual de Xintel")
@@ -264,7 +640,11 @@ elif seccion == ":material/upload: Cargar Excel Xintel":
                     db.upsert_clientes(registros)
                     comp = parse_complementary(archivo, periodo)
                     db.save_complementaria(periodo, comp)
-                    st.success(f"Archivo procesado — {len(registros)} fichas detectadas para el período {periodo}.", icon=":material/check_circle:")
+                    cartera = parse_cartera(archivo, periodo)
+                    db.insert_cartera(cartera)
+                    consultas = parse_consultas_diarias(archivo, periodo)
+                    db.insert_consultas_diarias(consultas)
+                    st.success(f"Archivo procesado — {len(registros)} fichas, {len(cartera)} propiedades en cartera, {len(consultas)} consultas diarias para {periodo}.", icon=":material/check_circle:")
                     st.dataframe(pd.DataFrame(registros).head(20), hide_index=True)
                 except Exception as e:
                     st.error(f"No se pudo procesar el archivo: {e}", icon=":material/error:")
@@ -332,7 +712,20 @@ elif seccion == ":material/description: Generar reporte":
                 with st.spinner("Generando reporte..."):
                     resumen = db.get_resumen_mercado(periodo)
                     visitas_guardadas = db.get_visitas(ficha, periodo)
-                    ruta = generar_reporte(cliente, resumen, visitas_guardadas, periodo=periodo)
+                    canales = db.get_canales(periodo)
+                    clientes_barrio = [c for c in db.get_clientes(periodo) if c.get("barrio") == cliente.get("barrio")]
+                    barrio_data = {}
+                    if clientes_barrio:
+                        vals = []
+                        for cb in clientes_barrio:
+                            v = excel_parser.valor_to_float(cb.get("valor"))
+                            if v is not None and cb.get("moneda") == "U$D":
+                                vals.append(v)
+                        barrio_data = {
+                            "consultas_promedio": sum(c["consultas"] for c in clientes_barrio) / len(clientes_barrio),
+                            "valor_promedio": sum(vals) / len(vals) if vals else 0,
+                        }
+                    ruta = generar_reporte(cliente, resumen, visitas_guardadas, periodo=periodo, canales=canales, barrio_data=barrio_data)
                     db.save_reporte(ficha, cliente["direccion"], periodo, datetime.now().isoformat(), str(ruta))
                     st.success("Reporte generado.", icon=":material/check_circle:")
                     with open(ruta, "rb") as f:

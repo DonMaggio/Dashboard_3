@@ -1,7 +1,15 @@
+import io
 import math
+import os
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 from fpdf import FPDF
 
@@ -264,7 +272,130 @@ def _draw_footer(pdf):
     pdf.set_y(y + 6)
 
 
-def generar_reporte(cliente, resumen, visitas, periodo=None):
+def _make_chart_image(chart_type, data, **kwargs):
+    fig, ax = plt.subplots(figsize=(3.2, 1.6), dpi=130)
+    fig.patch.set_facecolor("#F4F5FA")
+    ax.set_facecolor("#F4F5FA")
+
+    if chart_type == "bar":
+        labels = list(data.keys())
+        values = list(data.values())
+        colors = ["#2C2E7B"] * len(labels)
+        if kwargs.get("highlight"):
+            colors[-1] = "#EF8A23"
+        bars = ax.barh(labels, values, color=colors, height=0.6, edgecolor="white", linewidth=0.5)
+        for b, v in zip(bars, values):
+            ax.text(v + max(values) * 0.01, b.get_y() + b.get_height() / 2,
+                    f"{v:.0f}", va="center", fontsize=6, color="#2C2E7B", fontweight="bold")
+        ax.set_xlim(0, max(values) * 1.25)
+        ax.xaxis.set_visible(False)
+        ax.yaxis.set_ticks([])
+        for i, label in enumerate(labels):
+            ax.text(-max(values) * 0.02, i, label, ha="right", va="center", fontsize=5.5, color="#5B5F76")
+
+    elif chart_type == "comparison":
+        labels = list(data.keys())
+        values = list(data.values())
+        colors = [kwargs.get("color_self", "#EF8A23") if i == 0 else "#2C2E7B" for i in range(len(labels))]
+        bars = ax.bar(labels, values, color=colors, width=0.5, edgecolor="white", linewidth=0.5)
+        for b, v in zip(bars, values):
+            ax.text(b.get_x() + b.get_width() / 2, b.get_height() + max(values) * 0.02,
+                    f"{v:.1f}" if v != int(v) else f"{v:.0f}", ha="center", va="bottom",
+                    fontsize=7, color="#2C2E7B", fontweight="bold")
+        ax.set_ylim(0, max(values) * 1.3)
+        ax.yaxis.set_visible(False)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, fontsize=6.5, color="#5B5F76")
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(axis="x", length=0)
+
+    elif chart_type == "pie":
+        wedges, texts, autotexts = ax.pie(
+            list(data.values()), labels=list(data.keys()), autopct="%1.0f%%",
+            startangle=90, colors=["#2C2E7B", "#EF8A23", "#5B5F76", "#9A9DB0", "#C4C6D4"],
+            textprops={"fontsize": 5.5, "color": "#1E2233"},
+            pctdistance=0.75,
+        )
+        for t in autotexts:
+            t.set_fontsize(5.5)
+            t.set_color("#FFFFFF")
+            t.set_fontweight("bold")
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    plt.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.05)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=130, bbox_inches="tight", pad_inches=0.1,
+                facecolor=fig.get_facecolor(), edgecolor="none")
+    plt.close(fig)
+    buf.seek(0)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    tmp.write(buf.read())
+    tmp.close()
+    return tmp.name
+
+
+def _draw_comparativa(pdf, cliente, barrio_data):
+    pdf._section_title("Analisis comparativo")
+    consultas_prop = cliente.get("consultas", 0)
+    consultas_prom = barrio_data.get("consultas_promedio", 0)
+    valor_str = cliente.get("valor")
+    import excel_parser as _ep
+    valor_prop = _ep.valor_to_float(valor_str) if valor_str else None
+    valor_prom = barrio_data.get("valor_promedio")
+
+    texto = f"Esta propiedad recibio {consultas_prop} consultas. "
+    if consultas_prom > 0:
+        diff = consultas_prop - consultas_prom
+        signo = "+" if diff >= 0 else ""
+        texto += f"El promedio en {_s(cliente.get('barrio', 'el barrio'))} es de {consultas_prom:.0f} ({signo}{diff:.0f} vs el promedio). "
+    else:
+        texto += "No hay datos comparativos del barrio. "
+
+    if valor_prop and valor_prom:
+        diff_v = valor_prop - valor_prom
+        signo_v = "+" if diff_v >= 0 else ""
+        texto += f"Valor: U$D {valor_prop:,.0f} (promedio del barrio: U$D {valor_prom:,.0f}, {signo_v}U$D {abs(diff_v):,.0f})."
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(58, 61, 80)
+    pdf.multi_cell(182, 4.5, _s(texto))
+    pdf.ln(3)
+
+    if consultas_prom > 0:
+        chart_path = _make_chart_image("comparison", {
+            "Esta propiedad": consultas_prop,
+            f"Prom. {_s(cliente.get('barrio', 'barrio'))}": consultas_prom,
+        })
+        if chart_path:
+            pdf.image(chart_path, x=pdf.l_margin + 30, w=120)
+            pdf.ln(2)
+            os.unlink(chart_path)
+
+
+def _draw_canales_chart(pdf, canales):
+    if not canales:
+        return
+    pdf._section_title("Canales principales")
+    top = sorted(canales, key=lambda c: c["total"], reverse=True)[:5]
+    data = {_s(c["canal"][:18]): c["total"] for c in top}
+    chart_path = _make_chart_image("bar", data, highlight=False)
+    pdf.image(chart_path, x=pdf.l_margin + 30, w=120)
+    pdf.ln(2)
+    os.unlink(chart_path)
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*C_MUTED)
+    total = sum(c["total"] for c in canales)
+    for c in top[:3]:
+        pct = c["total"] / total * 100 if total > 0 else 0
+        pdf.cell(0, 4, _s(f"  {c['canal'][:22]}: {c['total']} ({pct:.0f}%)"))
+        pdf.ln(4)
+
+
+def generar_reporte(cliente, resumen, visitas, periodo=None, canales=None, barrio_data=None):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     pdf = ReportePDF(orientation="P", unit="mm", format="A4")
@@ -283,6 +414,12 @@ def generar_reporte(cliente, resumen, visitas, periodo=None):
 
     pdf._section_title("Detalle de visitas presenciales")
     _draw_visitas_table(pdf, visitas)
+
+    if barrio_data:
+        _draw_comparativa(pdf, cliente, barrio_data)
+
+    if canales:
+        _draw_canales_chart(pdf, canales)
 
     pdf._section_title(f"Contexto de mercado - {periodo_str}")
     _draw_mercado(pdf, resumen)
