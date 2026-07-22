@@ -713,19 +713,23 @@ elif seccion == ":material/description: Generar reporte":
                     resumen = db.get_resumen_mercado(periodo)
                     visitas_guardadas = db.get_visitas(ficha, periodo)
                     canales = db.get_canales(periodo)
-                    clientes_barrio = [c for c in db.get_clientes(periodo) if c.get("barrio") == cliente.get("barrio")]
-                    barrio_data = {}
-                    if clientes_barrio:
+                    todos = db.get_clientes(periodo)
+                    clientes_localidad = [c for c in todos if c.get("localidad") == cliente.get("localidad")]
+                    clientes_tipo_op = [c for c in todos if c.get("tipo") == cliente.get("tipo") and c.get("operacion") == cliente.get("operacion")]
+                    datos_comp = {}
+                    if clientes_localidad:
+                        datos_comp["consultas_prom_localidad"] = sum(c["consultas"] for c in clientes_localidad) / len(clientes_localidad)
+                    if clientes_tipo_op:
                         vals = []
-                        for cb in clientes_barrio:
-                            v = excel_parser.valor_to_float(cb.get("valor"))
-                            if v is not None and cb.get("moneda") == "U$D":
+                        for c in clientes_tipo_op:
+                            v = excel_parser.valor_to_float(c.get("valor"))
+                            if v is not None and c.get("moneda") == "U$D":
                                 vals.append(v)
-                        barrio_data = {
-                            "consultas_promedio": sum(c["consultas"] for c in clientes_barrio) / len(clientes_barrio),
-                            "valor_promedio": sum(vals) / len(vals) if vals else 0,
-                        }
-                    ruta = generar_reporte(cliente, resumen, visitas_guardadas, periodo=periodo, canales=canales, barrio_data=barrio_data)
+                        datos_comp["valor_promedio_tipo_op"] = sum(vals) / len(vals) if vals else 0
+                    datos_comp["localidad"] = cliente.get("localidad", "")
+                    datos_comp["tipo"] = cliente.get("tipo", "")
+                    datos_comp["operacion"] = cliente.get("operacion", "")
+                    ruta = generar_reporte(cliente, resumen, visitas_guardadas, periodo=periodo, canales=canales, datos_comp=datos_comp)
                     db.save_reporte(ficha, cliente["direccion"], periodo, datetime.now().isoformat(), str(ruta))
                     st.success("Reporte generado.", icon=":material/check_circle:")
                     with open(ruta, "rb") as f:

@@ -21,7 +21,6 @@ def _s(text):
         text = text.replace("\u2014", "-").replace("\u2013", "-")
         text = text.replace("\u2018", "'").replace("\u2019", "'")
         text = text.replace("\u201c", '"').replace("\u201d", '"')
-        text = text.replace("\u00f1", "n").replace("\u00d1", "N")
         return re.sub(r"[^\x00-\xFF]", "", text)
     return str(text)
 
@@ -99,7 +98,6 @@ def _draw_property_bar(pdf, cliente):
         ("Direccion", cliente.get("direccion", "")),
         ("Barrio / Localidad", f'{cliente.get("barrio", "")}, {cliente.get("localidad", "")}'),
         ("Ficha", f'#{cliente.get("ficha", "")}'),
-        ("Estado", cliente.get("estado", "")),
     ]
 
     usable = pdf.w - pdf.l_margin - pdf.r_margin
@@ -115,17 +113,8 @@ def _draw_property_bar(pdf, cliente):
 
         pdf.set_xy(x, y_bar + 10)
         pdf.set_font("Helvetica", "B", 12)
-        if i == 3:
-            sv = _s(valor)
-            ancho = pdf.get_string_width(sv) + 10
-            cx = x + (w_col - ancho) / 2
-            pdf.set_fill_color(*C_ACCENT)
-            pdf.set_text_color(*C_WHITE)
-            pdf.cell(ancho, 8, sv, fill=True, align="C")
-            pdf.set_text_color(*C_DARK)
-        else:
-            pdf.set_text_color(*C_PRIMARY)
-            pdf.cell(w_col, 8, _s(valor))
+        pdf.set_text_color(*C_PRIMARY)
+        pdf.cell(w_col, 8, _s(valor))
 
     pdf.set_y(y_bar + 24)
     pdf.set_draw_color(*C_ACCENT)
@@ -134,7 +123,7 @@ def _draw_property_bar(pdf, cliente):
     pdf.ln(2)
 
 
-def _draw_kpi_row(pdf, consultas, visitas_count, estado):
+def _draw_kpi_row(pdf, consultas, visitas_count, operacion):
     y0 = pdf.get_y()
     card_w = 58
     card_h = 25
@@ -143,7 +132,7 @@ def _draw_kpi_row(pdf, consultas, visitas_count, estado):
     for i, (numero, label) in enumerate([
         (str(consultas), "Consultas virtuales"),
         (str(visitas_count), "Visitas presenciales"),
-        (_s(estado), "Estado de la propiedad"),
+        (_s(operacion), "Operacion"),
     ]):
         x = pdf.l_margin + i * (card_w + gap)
         pdf.set_fill_color(*C_LIGHT_BG)
@@ -337,27 +326,32 @@ def _make_chart_image(chart_type, data, **kwargs):
     return tmp.name
 
 
-def _draw_comparativa(pdf, cliente, barrio_data):
+def _draw_comparativa(pdf, cliente, datos_comp):
     pdf._section_title("Analisis comparativo")
     consultas_prop = cliente.get("consultas", 0)
-    consultas_prom = barrio_data.get("consultas_promedio", 0)
+    consultas_prom = datos_comp.get("consultas_prom_localidad", 0)
+    localidad = datos_comp.get("localidad", cliente.get("localidad", "la localidad"))
+    tipo = datos_comp.get("tipo", cliente.get("tipo", ""))
+    operacion = datos_comp.get("operacion", cliente.get("operacion", ""))
     valor_str = cliente.get("valor")
     import excel_parser as _ep
     valor_prop = _ep.valor_to_float(valor_str) if valor_str else None
-    valor_prom = barrio_data.get("valor_promedio")
+    valor_prom = datos_comp.get("valor_promedio_tipo_op")
 
     texto = f"Esta propiedad recibio {consultas_prop} consultas. "
     if consultas_prom > 0:
         diff = consultas_prop - consultas_prom
         signo = "+" if diff >= 0 else ""
-        texto += f"El promedio en {_s(cliente.get('barrio', 'el barrio'))} es de {consultas_prom:.0f} ({signo}{diff:.0f} vs el promedio). "
+        texto += f"El promedio en {_s(localidad)} es de {consultas_prom:.0f} ({signo}{diff:.0f} vs el promedio). "
     else:
-        texto += "No hay datos comparativos del barrio. "
+        texto += "No hay datos comparativos de la localidad. "
 
-    if valor_prop and valor_prom:
+    if valor_prop is not None and valor_prom is not None and valor_prom > 0:
         diff_v = valor_prop - valor_prom
         signo_v = "+" if diff_v >= 0 else ""
-        texto += f"Valor: U$D {valor_prop:,.0f} (promedio del barrio: U$D {valor_prom:,.0f}, {signo_v}U$D {abs(diff_v):,.0f})."
+        texto += f"Valor: U$D {valor_prop:,.0f} (promedio de {_s(tipo)} en {_s(operacion)}: U$D {valor_prom:,.0f}, {signo_v}U$D {abs(diff_v):,.0f})."
+    elif valor_prop is not None:
+        texto += f"Valor: U$D {valor_prop:,.0f} (sin datos comparativos de {_s(tipo)} en {_s(operacion)})."
 
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(58, 61, 80)
@@ -367,7 +361,7 @@ def _draw_comparativa(pdf, cliente, barrio_data):
     if consultas_prom > 0:
         chart_path = _make_chart_image("comparison", {
             "Esta propiedad": consultas_prop,
-            f"Prom. {_s(cliente.get('barrio', 'barrio'))}": consultas_prom,
+            f"Prom. {_s(localidad[:16])}": consultas_prom,
         })
         if chart_path:
             pdf.image(chart_path, x=pdf.l_margin + 30, w=120)
@@ -395,7 +389,7 @@ def _draw_canales_chart(pdf, canales):
         pdf.ln(4)
 
 
-def generar_reporte(cliente, resumen, visitas, periodo=None, canales=None, barrio_data=None):
+def generar_reporte(cliente, resumen, visitas, periodo=None, canales=None, datos_comp=None):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     pdf = ReportePDF(orientation="P", unit="mm", format="A4")
@@ -410,13 +404,13 @@ def generar_reporte(cliente, resumen, visitas, periodo=None, canales=None, barri
 
     pdf.ln(6)
     pdf._section_title("Resumen de actividad del mes")
-    _draw_kpi_row(pdf, cliente.get("consultas", 0), len(visitas), cliente.get("estado", ""))
+    _draw_kpi_row(pdf, cliente.get("consultas", 0), len(visitas), cliente.get("operacion", ""))
 
     pdf._section_title("Detalle de visitas presenciales")
     _draw_visitas_table(pdf, visitas)
 
-    if barrio_data:
-        _draw_comparativa(pdf, cliente, barrio_data)
+    if datos_comp:
+        _draw_comparativa(pdf, cliente, datos_comp)
 
     if canales:
         _draw_canales_chart(pdf, canales)
